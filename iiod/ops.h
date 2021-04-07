@@ -77,6 +77,10 @@ int start_usb_daemon(struct iio_context *ctx, const char *ffs,
 		bool debug, bool use_aio, unsigned int nb_pipes,
 		struct thread_pool *pool,
 		const void *xml_zstd, size_t xml_zstd_len);
+int start_serial_daemon(struct iio_context *ctx, const char *dev,
+			unsigned int uart_bps, unsigned int uart_bits,
+			bool debug, struct thread_pool *pool,
+			const void *xml_zstd, size_t xml_zstd_len);
 
 int open_dev(struct parser_pdata *pdata, struct iio_device *dev,
 		size_t samples_count, const char *mask, bool cyclic);

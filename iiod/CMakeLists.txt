@@ -44,6 +44,11 @@ if (HAVE_FUNCTIONFS_V2)
 	endif (WITH_IIOD_USBD)
 endif (HAVE_FUNCTIONFS_V2)
 
+option(WITH_IIOD_SERIAL "Add serial (UART) support" ON)
+if (WITH_IIOD_SERIAL)
+	set(IIOD_CFILES ${IIOD_CFILES} serial.c)
+endif()
+
 add_executable(iiod ${IIOD_CFILES})
 set_target_properties(iiod PROPERTIES
 	C_STANDARD 99

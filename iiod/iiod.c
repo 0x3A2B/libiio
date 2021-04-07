@@ -79,6 +79,7 @@ static const struct option options[] = {
 	  {"aio", no_argument, 0, 'a'},
 	  {"ffs", required_argument, 0, 'F'},
 	  {"nb-pipes", required_argument, 0, 'n'},
+	  {"serial", required_argument, 0, 's'},
 	  {0, 0, 0, 0},
 };
 
@@ -91,6 +92,7 @@ static const char *options_descriptions[] = {
 	"Use asynchronous I/O.",
 	"Use the given FunctionFS mountpoint to serve over USB",
 	"Specify the number of USB pipes (ep couples) to use",
+	"Run " MY_NAME " on the specified UART.",
 };
 
 
@@ -348,6 +350,27 @@ static void *get_xml_zstd_data(const struct iio_context *ctx, size_t *out_len)
 #endif
 }
 
+static char * get_uart_params(const char *str,
+			      unsigned int *bps, unsigned int *bits)
+{
+	const char *ptr;
+	char *dev_name;
+
+	/* Default values when unspecified */
+	*bps = 57600;
+	*bits = 8;
+
+	ptr = strchr(str, ',');
+	if (!ptr) {
+		dev_name = strdup(str);
+	} else {
+		dev_name = strndup(str, ptr - str);
+		sscanf(ptr, ",%un%u", bps, bits);
+	}
+
+	return dev_name;
+}
+
 int main(int argc, char **argv)
 {
 	bool debug = false, interactive = false, use_aio = false;
@@ -356,12 +379,14 @@ int main(int argc, char **argv)
 	struct iio_context *ctx;
 	int c, option_index = 0;
 	char *ffs_mountpoint = NULL;
+	char *uart_params = NULL, *uart_dev = NULL;
+	unsigned int uart_bps, uart_bits;
 	char err_str[1024];
 	void *xml_zstd;
 	size_t xml_zstd_len = 0;
 	int ret;
 
-	while ((c = getopt_long(argc, argv, "+hVdDiaF:n:",
+	while ((c = getopt_long(argc, argv, "+hVdDiaF:n:s:",
 					options, &option_index)) != -1) {
 		switch (c) {
 		case 'd':
@@ -401,6 +426,15 @@ int main(int argc, char **argv)
 				IIO_ERROR("--nb-pipes: Invalid parameter\n");
 				return EXIT_FAILURE;
 			}
+			break;
+		case 's':
+			if (!WITH_IIOD_SERIAL) {
+				IIO_ERROR("IIOD was not compiled with serial support.\n");
+				return EXIT_FAILURE;
+
+			}
+
+			uart_params = optarg;
 			break;
 		case 'h':
 			usage();
@@ -448,6 +482,27 @@ int main(int argc, char **argv)
 			ret = EXIT_FAILURE;
 			goto out_destroy_thread_pool;
 		}
+	}
+
+	if (WITH_IIOD_SERIAL && uart_params) {
+		uart_dev = get_uart_params(uart_params, &uart_bps, &uart_bits);
+		if (!uart_dev) {
+			IIO_ERROR("Unable to parse serial parameters\n");
+			ret = EXIT_FAILURE;
+			goto out_destroy_thread_pool;
+		}
+
+		ret = start_serial_daemon(ctx, uart_dev, uart_bps, uart_bits,
+					  debug, main_thread_pool,
+					  xml_zstd, xml_zstd_len);
+		if (ret) {
+			iio_strerror(-ret, err_str, sizeof(err_str));
+			IIO_ERROR("Unable to start serial daemon: %s\n", err_str);
+			ret = EXIT_FAILURE;
+			goto out_destroy_thread_pool;
+		}
+
+		free(uart_dev);
 	}
 
 	if (interactive)
